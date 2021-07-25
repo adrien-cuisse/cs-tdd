@@ -1,0 +1,9 @@
+# Code coverage
+./**/StrykerOutput/
+
+
+Domain/obj
+Domain/bin/
+
+Domain.Tests/obj
+Domain.Tests/bin
