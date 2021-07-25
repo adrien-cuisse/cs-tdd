@@ -9,11 +9,11 @@ namespace CleanArch.Domain.ValueObject.Identity.Uuid
     /// </summary>
     public abstract partial class Uuid : IUuid
     {
-        /// The version of the Uuid
+        /// <value>The version of the Uuid</value>
         public int Version => this.version;
 
-        /// The variant of the Uuid
-        public string Variant => GetVariant();
+        /// <value>The variant of the Uuid</value>
+        public string Variant => GetVariantDescription();
 
         public sealed override string ToString() => this.ToRfcUuidString();
 
@@ -130,8 +130,7 @@ namespace CleanArch.Domain.ValueObject.Identity.Uuid
             int version = versionBits >> 4;
 
             byte clockSequenceHighAndVariant = allBytes.GetRange(8, 1)[0];
-            // byte variantBits = Convert.ToByte(clockSequenceHighAndVariant >> 5);
-            var (variant, variantSize) = this.GetVariantWithSize(clockSequenceHighAndVariant);
+            var (variant, variantSize) = GetVariantWithSize(clockSequenceHighAndVariant);
 
             this.Initialize(
                 timestampLow: allBytes.GetRange(0, 4),
@@ -193,7 +192,11 @@ namespace CleanArch.Domain.ValueObject.Identity.Uuid
             this.node = node;
         }
 
-        private string GetVariant()
+        /// <summary>
+        /// Describes the variant.
+        /// </summary>
+        /// <returns>Description of the variant</returns>
+        private string GetVariantDescription()
         {
             switch (this.variant) {
                 case FUTURE_VARIANT:
@@ -207,6 +210,12 @@ namespace CleanArch.Domain.ValueObject.Identity.Uuid
             }
         }
 
+        /// <summary>
+        /// Puts all the bytes at the appropriate position in a string.
+        /// </summary>
+        /// <returns>
+        /// RFC-compliant string representation (eg., 01234567-89ab-cdef-0123456789ab)
+        /// </returns>
         public string ToRfcUuidString()
         {
             byte versionBits = Convert.ToByte(this.version << 4);
@@ -236,65 +245,65 @@ namespace CleanArch.Domain.ValueObject.Identity.Uuid
         }
 
         /// <summary>
-        /// Checks if the bits match the variant
+        /// Checks if the bits match the variant.
         /// </summary>
         /// <param name="variant">List of bit-pattern the variant can have</param>
         /// <param name="clockSequenceHigh">Clock sequence high (byte 8)</param>
-        /// <returns></returns>
-        private bool IsVariant(byte[] variant, byte clockSequenceHigh)
+        /// <returns>True if the byte matches the variant</returns>
+        private static bool IsVariant(byte[] variant, byte clockSequenceHigh)
         {
             return Array.Exists(variant, bits => (clockSequenceHigh & bits) == bits);
         }
 
         /// <summary>
-        /// Checks if the variant bits match the RFC variant
+        /// Checks if the variant bits match the RFC variant.
         /// </summary>
         /// <param name="clockSequenceHigh">Clock sequence high (byte 8)</param>
         /// <returns>True if the byte matches 0b_10xx_xxxx</returns>
-        private bool IsRfcVariant(byte clockSequenceHigh)
+        private static bool IsRfcVariant(byte clockSequenceHigh)
         {
             var rfc = new byte[] { 0b_1000_0000, 0b_1010_0000 };
             return IsVariant(rfc, clockSequenceHigh);
         }
 
         /// <summary>
-        /// Checks if the variant bits match the Microsoft variant
+        /// Checks if the variant bits match the Microsoft variant.
         /// </summary>
         /// <param name="clockSequenceHigh">Clock sequence high (byte 8)</param>
         /// <returns>True if the byte matches 0b_110x_xxxx</returns>
-        private bool IsMicrosoftVariant(byte clockSequenceHigh)
+        private static bool IsMicrosoftVariant(byte clockSequenceHigh)
         {
             var microsoft = new byte[] { 0b_1100_0000 };
             return IsVariant(microsoft, clockSequenceHigh);
         }
 
         /// <summary>
-        /// Checks if the variant bits match the Future variant
+        /// Checks if the variant bits match the Future variant.
         /// </summary>
         /// <param name="clockSequenceHigh">Clock sequence high (byte 8)</param>
         /// <returns>True if the byte matches 0b_111x_xxxx</returns>
-        private bool IsFutureVariant(byte clockSequenceHigh)
+        private static bool IsFutureVariant(byte clockSequenceHigh)
         {
             var future = new byte[] { 0b_1110_0000 };
             return IsVariant(future, clockSequenceHigh);
         }
 
         /// <summary>
-        /// Extracts the variant and its size from the clock-sequence-high byte
+        /// Extracts the variant and its size from the clock-sequence-high byte.
         /// </summary>
         /// <param name="clockSequenceHigh">Clock sequence high (byte 8)</param>
         /// <returns>Tuple with variant pattern, and its size in bits</returns>
-        private (int, int) GetVariantWithSize(byte clockSequenceHigh)
+        private static (int, int) GetVariantWithSize(byte clockSequenceHigh)
         {
-            if (this.IsFutureVariant(clockSequenceHigh))
+            if (IsFutureVariant(clockSequenceHigh))
             {
                 return (FUTURE_VARIANT, FUTURE_VARIANT_SIZE);
             }
-            else if (this.IsMicrosoftVariant(clockSequenceHigh))
+            else if (IsMicrosoftVariant(clockSequenceHigh))
             {
                 return (MICROSOFT_VARIANT, MICROSOFT_VARIANT_SIZE);
             }
-            else if (this.IsRfcVariant(clockSequenceHigh))
+            else if (IsRfcVariant(clockSequenceHigh))
             {
                 return (RFC_VARIANT, RFC_VARIANT_SIZE);
             }
