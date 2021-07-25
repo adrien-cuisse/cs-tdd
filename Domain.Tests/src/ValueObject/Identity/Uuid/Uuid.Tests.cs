@@ -32,6 +32,20 @@ namespace Domain.Tests.ValueObject.Identity.Uuid
 
     public class Tests
     {
+        // WIP: constructor from 16 bytes
+        // [Test]
+        // public void Expects16Bytes()
+        // {
+        //     // given a list of bytes which size is lesser than 16
+        //     var bytes = new List<byte> { 0x00 };
+
+        //     // when trying to create an Uuid from it
+        //     TestDelegate instanciation = () => new ConcreteUuid(bytes: bytes);
+
+        //     // then an exception should be thrown
+        //     Assert.That(instanciation, Throws.ArgumentException);
+        // }
+
         [Test]
         public void Expects4BitsVersion()
         {
