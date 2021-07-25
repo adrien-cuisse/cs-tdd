@@ -125,31 +125,22 @@ namespace CleanArch.Domain.ValueObject.Identity.Uuid
                 allBytes.Add(Convert.ToByte(hexByte, fromBase: 16));
             }
 
-            int variant = 0;
-            byte variantBitsBlock = (byte) ((allBytes.GetRange(8, 1)[0] & 0b_1110_0000) >> 5);
+            List<byte> timestampHighAndVersion = allBytes.GetRange(6, 2);
+            int versionBits = timestampHighAndVersion[0] & VERSION_BITS_MASK;
+            int version = versionBits >> 4;
 
-            if (Array.Exists(new byte[] { 0b111 }, bits => bits == variantBitsBlock)) {
-                variant = FUTURE_VARIANT;
-                variantSize = FUTURE_VARIANT_SIZE;
-            } else if (Array.Exists(new byte[] { 0b110 }, bits => bits == variantBitsBlock)) {
-                variant = MICROSOFT_VARIANT;
-                variantSize = FUTURE_VARIANT_SIZE;
-            } else if (Array.Exists(new byte[] { 0b101, 0b100 }, bits => bits == variantBitsBlock)) {
-                variant = RFC_VARIANT;
-                variantSize = RFC_VARIANT_SIZE;
-            } else {
-                variant = APOLLO_NCS_VARIANT;
-                variantSize = APOLLO_NCS_VARIANT_SIZE;
-            }
+            byte clockSequenceHighAndVariant = allBytes.GetRange(8, 1)[0];
+            // byte variantBits = Convert.ToByte(clockSequenceHighAndVariant >> 5);
+            var (variant, variantSize) = this.GetVariantWithSize(clockSequenceHighAndVariant);
 
             this.Initialize(
                 timestampLow: allBytes.GetRange(0, 4),
                 timestampMid: allBytes.GetRange(4, 2),
-                version: (allBytes.GetRange(6, 1)[0] & VERSION_BITS_MASK) >> 4,
-                timestampHigh: allBytes.GetRange(6, 2),
+                version: version,
+                timestampHigh: timestampHighAndVersion,
                 variant: variant,
                 variantSize: variantSize,
-                clockSequenceHigh: allBytes.GetRange(8, 1)[0],
+                clockSequenceHigh: clockSequenceHighAndVariant,
                 clockSequenceLow: allBytes.GetRange(9, 1)[0],
                 node: allBytes.GetRange(10, 6)
             );
@@ -191,13 +182,9 @@ namespace CleanArch.Domain.ValueObject.Identity.Uuid
             this.variant = variant;
             this.variantSize = variantSize;
 
-            if (this.variantSize == 1) {
-                this.clockSequenceHigh = (byte) (clockSequenceHigh & 0b_0111_1111);
-            } else if (this.variantSize == 2) {
-                this.clockSequenceHigh = (byte) (clockSequenceHigh & 0b_0011_1111);
-            } else if (this.variantSize == 3) {
-                this.clockSequenceHigh = (byte) (clockSequenceHigh & 0b_0001_1111);
-            }
+            byte clockSequenceHighBitMask = Convert.ToByte(0b_1111_1111 >> this.variantSize);
+            this.clockSequenceHigh = Convert.ToByte(clockSequenceHigh & clockSequenceHighBitMask);
+
             this.clockSequenceLow = clockSequenceLow;
 
             if (node.Count != 6) {
@@ -222,28 +209,97 @@ namespace CleanArch.Domain.ValueObject.Identity.Uuid
 
         public string ToRfcUuidString()
         {
-            var builder = new System.Text.StringBuilder(36);
+            byte versionBits = Convert.ToByte(this.version << 4);
+            byte timestampHighAndVersion = Convert.ToByte(versionBits | this.timestampHigh[0]);
 
-            byte versionBits = (byte) (this.version << 4);
-            byte timestampHighAndVersion = (byte) (versionBits | this.timestampHigh[0]);
-
-            byte variantBits = (byte) (this.variant << (8 - this.variantSize));
-            byte clockSequenceHighAndVariant = (byte) (variantBits | this.clockSequenceHigh);
+            byte variantBits = Convert.ToByte(this.variant << (8 - this.variantSize));
+            byte clockSequenceHighAndVariant = Convert.ToByte(variantBits | this.clockSequenceHigh);
 
             var allBytes = new List<List<byte>> {
+                this.timestampLow,
                 this.timestampMid,
                 new List<byte> { timestampHighAndVersion, this.timestampHigh[1] },
                 new List<byte> { clockSequenceHighAndVariant, this.clockSequenceLow },
                 this.node
             };
 
-            this.timestampLow.ForEach(b => builder.AppendFormat("{0:x2}", b));
+            var builder = new System.Text.StringBuilder(36);
+
             foreach (var byteList in allBytes) {
-                builder.Append('-');
-                byteList.ForEach(b => builder.AppendFormat("{0:x2}", b));
+                if (builder.Length > 0) {
+                    builder.Append('-');
+                }
+                byteList.ForEach(octet => builder.AppendFormat("{0:x2}", octet));
             }
 
             return builder.ToString();
+        }
+
+        /// <summary>
+        /// Checks if the bits match the variant
+        /// </summary>
+        /// <param name="variant">List of bit-pattern the variant can have</param>
+        /// <param name="clockSequenceHigh">Clock sequence high (byte 8)</param>
+        /// <returns></returns>
+        private bool IsVariant(byte[] variant, byte clockSequenceHigh)
+        {
+            return Array.Exists(variant, bits => (clockSequenceHigh & bits) == bits);
+        }
+
+        /// <summary>
+        /// Checks if the variant bits match the RFC variant
+        /// </summary>
+        /// <param name="clockSequenceHigh">Clock sequence high (byte 8)</param>
+        /// <returns>True if the byte matches 0b_10xx_xxxx</returns>
+        private bool IsRfcVariant(byte clockSequenceHigh)
+        {
+            var rfc = new byte[] { 0b_1000_0000, 0b_1010_0000 };
+            return IsVariant(rfc, clockSequenceHigh);
+        }
+
+        /// <summary>
+        /// Checks if the variant bits match the Microsoft variant
+        /// </summary>
+        /// <param name="clockSequenceHigh">Clock sequence high (byte 8)</param>
+        /// <returns>True if the byte matches 0b_110x_xxxx</returns>
+        private bool IsMicrosoftVariant(byte clockSequenceHigh)
+        {
+            var microsoft = new byte[] { 0b_1100_0000 };
+            return IsVariant(microsoft, clockSequenceHigh);
+        }
+
+        /// <summary>
+        /// Checks if the variant bits match the Future variant
+        /// </summary>
+        /// <param name="clockSequenceHigh">Clock sequence high (byte 8)</param>
+        /// <returns>True if the byte matches 0b_111x_xxxx</returns>
+        private bool IsFutureVariant(byte clockSequenceHigh)
+        {
+            var future = new byte[] { 0b_1110_0000 };
+            return IsVariant(future, clockSequenceHigh);
+        }
+
+        /// <summary>
+        /// Extracts the variant and its size from the clock-sequence-high byte
+        /// </summary>
+        /// <param name="clockSequenceHigh">Clock sequence high (byte 8)</param>
+        /// <returns>Tuple with variant pattern, and its size in bits</returns>
+        private (int, int) GetVariantWithSize(byte clockSequenceHigh)
+        {
+            if (this.IsFutureVariant(clockSequenceHigh))
+            {
+                return (FUTURE_VARIANT, FUTURE_VARIANT_SIZE);
+            }
+            else if (this.IsMicrosoftVariant(clockSequenceHigh))
+            {
+                return (MICROSOFT_VARIANT, MICROSOFT_VARIANT_SIZE);
+            }
+            else if (this.IsRfcVariant(clockSequenceHigh))
+            {
+                return (RFC_VARIANT, RFC_VARIANT_SIZE);
+            }
+
+            return (APOLLO_NCS_VARIANT, APOLLO_NCS_VARIANT_SIZE);
         }
     }
 }
