@@ -215,10 +215,8 @@ namespace CleanArch.Domain.ValueObject.Identity.Uuid
                     return "Microsoft (backward compatibility)";
                 case RFC_VARIANT:
                     return "RFC";
-                case APOLLO_NCS_VARIANT:
-                    return "Apollo NCS (backward compatibility)";
                 default:
-                    return "Unknown";
+                    return "Apollo NCS (backward compatibility)";
             }
         }
 
