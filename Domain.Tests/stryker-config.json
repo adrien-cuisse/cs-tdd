@@ -1,0 +1,27 @@
+{
+    "stryker-config": {
+        "reporters": [
+            "progress",
+            "html"
+        ],
+        "log-level": "info",
+        "log-file": true,
+        "timeout-ms": 10000,
+        "max-concurrent-test-runners": 6,
+        "threshold-high": 100,
+        "threshold-low": 95,
+        "threshold-break": 0,
+        "mutation-level": "Complete",
+        "mutate": [
+            "!ExampleClass.cs",
+            "!Migrations/*.*",
+            "!ExampleDirectory\\ExampleClass2.cs"
+        ],
+        "ignore-methods": [
+            "*Log*",
+            "ToString",
+            "*HashCode*"
+        ],
+        "coverage-analysis": "perTestInIsolation"
+    }
+}

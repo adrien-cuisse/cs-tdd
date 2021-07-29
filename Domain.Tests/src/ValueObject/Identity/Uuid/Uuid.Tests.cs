@@ -1,3 +1,5 @@
+using System.Collections.Immutable;
+using System.Linq;
 using System;
 using NUnit.Framework;
 using System.Collections.Generic;
@@ -7,44 +9,84 @@ namespace Domain.Tests.ValueObject.Identity.Uuid
 {
     internal class ConcreteUuid : CleanArch.Domain.ValueObject.Identity.Uuid.Uuid
     {
-        internal ConcreteUuid(
-            List<byte> timestampLow = null,
-            List<byte> timestampMid = null,
-            int version = 0x00,
-            List<byte> timestampHigh = null,
-            byte clockSequenceHigh = 0x00,
-            byte clockSequenceLow = 0x00,
-            List<byte> node = null
-        ) : base(
-            timestampLow ?? new List<byte> { 0x00, 0x00, 0x00, 0x00 },
-            timestampMid ?? new List<byte> { 0x00, 0x00 },
-            version,
-            timestampHigh ?? new List<byte> { 0x00, 0x00 },
-            clockSequenceHigh,
-            clockSequenceLow,
-            node ?? new List<byte> { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 }
-        ) { }
-
-        internal ConcreteUuid(string rfcUuidRepresentation) : base(rfcUuidRepresentation)
+        internal ConcreteUuid(int version, List<byte> bytes): base(version, bytes)
         {
+        }
+
+        internal ConcreteUuid(int version, List<byte> timestamp, List<byte> clockSequence, List<byte> node)
+            : base(
+                version,
+                timestamp,
+                clockSequence,
+                node)
+        {
+        }
+
+        internal ConcreteUuid(int version, string uuidString) : base(version, uuidString)
+        {
+        }
+
+        internal static List<byte> DefaultBytes()
+        {
+            var bytes = new List<byte>(16);
+            bytes.AddRange(DefaultTimestamp());
+            bytes.AddRange(DefaultClockSequence());
+            bytes.AddRange(DefaultNode());
+
+            return bytes;
+        }
+
+        internal static List<byte> DefaultTimestamp() => new List<byte>
+        {
+            0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00,
+        };
+
+        internal static List<byte> DefaultClockSequence() => new List<byte>
+        {
+            0x00, 0x00,
+        };
+
+        internal static List<byte> DefaultNode() => new List<byte>
+        {
+            0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00,
+        };
+
+        internal static ConcreteUuid Constructor1(int version = 0, List<byte> bytes = null)
+        {
+            return new ConcreteUuid(version, bytes ?? DefaultBytes());
+        }
+
+        internal static ConcreteUuid Constructor2(int version = 0, List<byte> timestamp = null, List<byte> clockSequence = null, List<byte> node = null)
+        {
+            return new ConcreteUuid(
+                version,
+                timestamp ?? DefaultTimestamp(),
+                clockSequence ?? DefaultClockSequence(),
+                node ?? DefaultNode());
+        }
+
+        internal static ConcreteUuid Constructor3(int version = 0, string uuidString = "00000000-0000-0000-0000-000000000000")
+        {
+            return new ConcreteUuid(version, uuidString);
         }
     }
 
     public class Tests
     {
-        // WIP: constructor from 16 bytes
-        // [Test]
-        // public void Expects16Bytes()
-        // {
-        //     // given a list of bytes which size is lesser than 16
-        //     var bytes = new List<byte> { 0x00 };
+        [Test]
+        public void Expects16Bytes()
+        {
+            // given a list of bytes which size is lesser than 16
+            var bytes = new List<byte>();
 
-        //     // when trying to create an Uuid from it
-        //     TestDelegate instanciation = () => new ConcreteUuid(bytes: bytes);
+            // when trying to create an Uuid from it
+            TestDelegate instanciation = () => ConcreteUuid.Constructor1(bytes: bytes);
 
-        //     // then an exception should be thrown
-        //     Assert.That(instanciation, Throws.ArgumentException);
-        // }
+            // then an exception should be thrown
+            Assert.That(instanciation, Throws.ArgumentException);
+        }
 
         [Test]
         public void Expects4BitsVersion()
@@ -53,46 +95,39 @@ namespace Domain.Tests.ValueObject.Identity.Uuid
             var version = 0x42;
 
             // when trying to create an Uuid from it
-            TestDelegate instanciation = () => new ConcreteUuid(version: version);
+            TestDelegate instanciation = () => ConcreteUuid.Constructor1(version: version);
 
             // then an exception should be thrown
             Assert.That(instanciation, Throws.ArgumentException);
         }
 
         [Test]
-        public void Expects4TimestampLowBytes()
+        public void Expects8TimestampBytes()
         {
-            // given an invalid count of timestamp-low bytes
-            var timestampLowBytes = new List<byte> { 0x42 };
+            // given an invalid count of clock-sequence bytes
+            var timestampBytes = new List<byte>
+            {
+                0x00, 0x00, 0x00, 0x00,
+                0x00, 0x00, 0x00, 0x00,
+                // requires more than 8 bytes for some reason, otherwise its unable to detect the (Count == 8) mutation
+                0x00,
+            };
 
             // when trying to create an Uuid from it
-            TestDelegate instanciation = () => new ConcreteUuid(timestampLow: timestampLowBytes);
+            TestDelegate instanciation = () => ConcreteUuid.Constructor2(timestamp: timestampBytes);
 
             // then an exception should be thrown
             Assert.That(instanciation, Throws.ArgumentException);
         }
 
         [Test]
-        public void Expects2TimestampMidBytes()
+        public void Expects2ClockSequenceBytes()
         {
-            // given an invalid count of timestamp-mid bytes
-            var timestampMidBytes = new List<byte> { 0x42 };
+            // given an invalid count of clock-sequence bytes
+            var clockSequenceBytes = new List<byte>();
 
             // when trying to create an Uuid from it
-            TestDelegate instanciation = () => new ConcreteUuid(timestampMid: timestampMidBytes);
-
-            // then an exception should be thrown
-            Assert.That(instanciation, Throws.ArgumentException);
-        }
-
-        [Test]
-        public void Expects2TimestampHighBytes()
-        {
-            // given an invalid count of timestamp-high bytes
-            var timestampHighBytes = new List<byte> { 0x42 };
-
-            // when trying to create an Uuid from it
-            TestDelegate instanciation = () => new ConcreteUuid(timestampHigh: timestampHighBytes);
+            TestDelegate instanciation = () => ConcreteUuid.Constructor2(clockSequence: clockSequenceBytes);
 
             // then an exception should be thrown
             Assert.That(instanciation, Throws.ArgumentException);
@@ -101,11 +136,11 @@ namespace Domain.Tests.ValueObject.Identity.Uuid
         [Test]
         public void Expects6NodeBytes()
         {
-            // given an invalid count of timestamp-high bytes
-            var nodeBytes = new List<byte> { 0x42 };
+            // given an invalid count of node bytes
+            var nodeBytes = new List<byte>();
 
             // when trying to create an Uuid from it
-            TestDelegate instanciation = () => new ConcreteUuid(node: nodeBytes);
+            TestDelegate instanciation = () => ConcreteUuid.Constructor2(node: nodeBytes);
 
             // then an exception should be thrown
             Assert.That(instanciation, Throws.ArgumentException);
@@ -115,7 +150,7 @@ namespace Domain.Tests.ValueObject.Identity.Uuid
         public void HasRfcCompliantRepresentation()
         {
             // given a valid Uuid
-            var uuid = new ConcreteUuid();
+            var uuid = ConcreteUuid.Constructor1();
 
             // when checking its string-representation
             string rfcRepresentation = uuid.ToString();
@@ -128,7 +163,7 @@ namespace Domain.Tests.ValueObject.Identity.Uuid
         public void InterlopsVersionInTimestampHighMostSignificantByte()
         {
             // given an uuid version 7
-            var uuid = new ConcreteUuid(version: 7);
+            var uuid = ConcreteUuid.Constructor1(version: 7);
 
             // when checking its string-representation
             string rfcRepresentation = uuid.ToString();
@@ -141,7 +176,7 @@ namespace Domain.Tests.ValueObject.Identity.Uuid
         public void InterlopsVariantInClockSequenceHigh()
         {
             // given an uuid with default variant
-            var uuid = new ConcreteUuid();
+            var uuid = ConcreteUuid.Constructor1();
 
             // when checking the variant digit in its string-representation
             string variantHexaByte = uuid.ToString().Substring(startIndex: 19, length: 2);
@@ -155,7 +190,7 @@ namespace Domain.Tests.ValueObject.Identity.Uuid
         public void HasRfcVariantByDefault()
         {
             // given an uuid made from bytes
-            var uuid = new ConcreteUuid();
+            var uuid = ConcreteUuid.Constructor1();
 
             // when checking its variant
             string variant = uuid.Variant;
@@ -168,21 +203,20 @@ namespace Domain.Tests.ValueObject.Identity.Uuid
         public void PutsAllBytesAtCorrectionPosition()
         {
             // given an uuid with known bytes
-            var uuid = new ConcreteUuid(
-                timestampLow: new List<byte>{ 0xde, 0xaf, 0xba, 0xbe },
-                timestampMid: new List<byte> { 0xde, 0xad },
-                version: 0x7,
-                timestampHigh: new List<byte> { 0xe, 0xef },
-                clockSequenceHigh: 0xa,
-                clockSequenceLow: 0x84,
-                node: new List<byte> { 0xc0, 0xff, 0xee, 0xba, 0x0b, 0xab }
-            );
+            var uuid = ConcreteUuid.Constructor1(bytes: new List<byte>
+            {
+                0xde, 0xaf, 0xba, 0xbe,
+                0xde, 0xad, 0x01, 0x23,
+                0xbe, 0xef,
+                0xc0, 0xff, 0xee,
+                0xba, 0x0b, 0xab,
+            });
 
             // when checking its string-representation
             string rfcRepresentation = uuid.ToString();
 
             // then it should match the expected string
-            Assert.AreEqual("deafbabe-dead-7eef-8a84-c0ffeeba0bab", rfcRepresentation);
+            Assert.AreEqual("deafbabe-dead-0123-beef-c0ffeeba0bab", rfcRepresentation);
         }
 
         [Test]
@@ -192,7 +226,20 @@ namespace Domain.Tests.ValueObject.Identity.Uuid
             var uuidString = "000000-0000-000-0000-000000000000";
 
             // when trying to create an Uuid from it
-            TestDelegate instanciation = () => new ConcreteUuid(uuidString);
+            TestDelegate instanciation = () => ConcreteUuid.Constructor3(uuidString: uuidString);
+
+            // then an exception should be thrown
+            Assert.That(instanciation, Throws.ArgumentException);
+        }
+
+        [Test]
+        public void RequiresCorrectVersionInString()
+        {
+            // given a RFC-compliant Uuid-string but with incorrect version
+            var uuidString = "00000000-0000-7000-0000-000000000000";
+
+            // when creating an instance from it and specifying a different version
+            TestDelegate instanciation = () => ConcreteUuid.Constructor3(version: 5, uuidString: uuidString);
 
             // then an exception should be thrown
             Assert.That(instanciation, Throws.ArgumentException);
@@ -202,10 +249,10 @@ namespace Domain.Tests.ValueObject.Identity.Uuid
         public void CreatesInstanceFromString()
         {
             // given a RFC-compliant Uuid-string
-            var uuidString = "02eb9d06-941c-4780-b5bd-01aaf3393a40";
+            var uuidString = "02eb9d06-941c-0780-b5bd-01aaf3393a40";
 
             // when creating an instance from it
-            var uuid = new ConcreteUuid(uuidString);
+            var uuid = ConcreteUuid.Constructor3(uuidString: uuidString);
 
             // then it should give back the base Uuid-string
             Assert.AreEqual(uuidString, uuid.ToString());
@@ -213,17 +260,24 @@ namespace Domain.Tests.ValueObject.Identity.Uuid
 
         private static IEnumerable<string[]> VariantDigitProvider()
         {
-            foreach (char variantDigit in "01234567".ToCharArray()) {
-                yield return new string[] { variantDigit.ToString(), "Apollo NCS (backward compatibility)" };
-            }
-            foreach (char variantDigit in "89ab".ToCharArray()) {
-                yield return new string[] { variantDigit.ToString(), "RFC" };
-            }
-            foreach (char variantDigit in "cd".ToCharArray()) {
-                yield return new string[] { variantDigit.ToString(), "Microsoft (backward compatibility)" };
-            }
-            foreach (char variantDigit in "ef".ToCharArray()) {
-                yield return new string[] { variantDigit.ToString(), "Reserved (future definition)" };
+            var variants = new Dictionary<string, string>
+            {
+                { "01234567", "Apollo NCS (backward compatibility)" },
+                { "89ab", "RFC" },
+                { "cd", "Microsoft (backward compatibility)" },
+                { "ef", "Reserved (future definition)" },
+            };
+
+            foreach (KeyValuePair<string,string> variant in variants)
+            {
+                foreach (char variantDigit in variant.Key.ToCharArray())
+                {
+                    yield return new string[]
+                    {
+                        variantDigit.ToString(),
+                        variant.Value,
+                    };
+                }
             }
         }
 
@@ -232,8 +286,9 @@ namespace Domain.Tests.ValueObject.Identity.Uuid
         public void DetectsVariants(string variantDigit, string expectedVariant)
         {
             // given an Uuid made from a string with a given variant digit
-            var uuid = new ConcreteUuid($"00000000-0000-cafe-{variantDigit}000-cafe00000000");
-            // var uuid = new ConcreteUuid($"10000000-2000-3000-{variantDigit}000-000000000000");
+            var uuid = ConcreteUuid.Constructor3(
+                version: 0,
+                uuidString: $"00000000-0000-0000-{variantDigit}000-000000000000");
 
             // whecn cheking its variant
             string detectedVariant = uuid.Variant;
@@ -255,13 +310,12 @@ namespace Domain.Tests.ValueObject.Identity.Uuid
         // public void CreatesVersionedUuidFromString((char, int) version)
         public void CreatesVersionedUuidFromString((char, int) version)
         {
-            var (versionDigit, expectedVersion) = version;
-
             // given a versioned uuid-string
+            var (versionDigit, expectedVersion) = version;
             var uuidString = $"00000000-0000-{versionDigit}000-0000-000000000000";
 
             // when creating an Uuid from it
-            var uuid = new ConcreteUuid(uuidString);
+            var uuid = ConcreteUuid.Constructor3(version: expectedVersion, uuidString: uuidString);
 
             // then its version number should have been extracted from the given string
             Assert.AreEqual(expectedVersion, uuid.Version);

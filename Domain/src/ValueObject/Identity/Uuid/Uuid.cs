@@ -71,10 +71,10 @@ namespace CleanArch.Domain.ValueObject.Identity.Uuid
 
         /// The variant used, may differ from default when made from string, 2 most significants bits of byte 8
         /// <see>https://datatracker.ietf.org/doc/html/rfc4122#section-4.1.1</name>
-        private int variant = RFC_VARIANT;
+        private int variant;
 
         /// Default variant size
-        private int variantSize = RFC_VARIANT_SIZE;
+        private int variantSize;
 
         /// Byte 8
         private byte clockSequenceHigh;
@@ -85,90 +85,77 @@ namespace CleanArch.Domain.ValueObject.Identity.Uuid
         /// Bytes 10 to 15
         private List<byte> node;
 
-        protected Uuid(
-            List<byte> timestampLow,
-            List<byte> timestampMid,
-            int version,
-            List<byte> timestampHigh,
-            byte clockSequenceHigh,
-            byte clockSequenceLow,
-            List<byte> node
-        ) {
-            this.Initialize(
-                timestampLow: timestampLow,
-                timestampMid: timestampMid,
+        protected Uuid(int version, List<byte> bytes)
+        {
+            if (bytes.Count != 16)
+            {
+                throw new ArgumentException($"Bytes bytes count must be 16, got {bytes.Count}");
+            }
+
+            Initialize(
                 version: version,
-                timestampHigh: timestampHigh,
-                variant: RFC_VARIANT,
-                variantSize: RFC_VARIANT_SIZE,
-                clockSequenceHigh: clockSequenceHigh,
-                clockSequenceLow: clockSequenceLow,
-                node: node
-            );
+                timestamp: bytes.GetRange(0, 8),
+                clockSequence: bytes.GetRange(8, 2),
+                node: bytes.GetRange(10, 6));
         }
 
-        protected Uuid(string uuidString)
+        protected Uuid(int version, List<byte> timestamp, List<byte> clockSequence, List<byte> node)
+        {
+            if (timestamp.Count != 8)
+            {
+                throw new ArgumentException($"Timestamp bytes count must be 8, got {timestamp.Count}");
+            }
+            else if (clockSequence.Count != 2)
+            {
+                throw new ArgumentException($"Clock-sequence bytes count must be 2, got {clockSequence.Count}");
+            }
+            else if (node.Count != 6)
+            {
+                throw new ArgumentException($"Node bytes count must be 6, got {node.Count}");
+            }
+
+            Initialize(
+                version: version,
+                timestamp: timestamp,
+                clockSequence: clockSequence,
+                node: node);
+        }
+
+        protected Uuid(int version, string uuidString)
         {
             if (IsNotRfcCompliant(uuidString))
             {
                 throw new ArgumentException($"The Uuid-string {uuidString} is not RFC-compliant");
             }
+
+            string versionDigit = "0" + uuidString.Substring(14, 1);
+            int versionInString = Convert.ToInt32(ParseHexadecimalString(versionDigit)[0]);
+            if (version != versionInString)
+            {
+                throw new ArgumentException($"The string {uuidString} is not a valid UUIDv{version}");
+            }
             uuidString = uuidString.Replace("-", String.Empty);
 
-            List<byte> allBytes = ParseHexadecimalString(uuidString);
+            List<byte> bytes = ParseHexadecimalString(uuidString);
 
-            List<byte> timestampHighAndVersion = allBytes.GetRange(6, 2);
-            int version = timestampHighAndVersion[0] >> 4;
+            var (variant, variantSize) = GetVariantWithSize(bytes[8]);
 
-            byte clockSequenceHighAndVariant = allBytes.GetRange(8, 1)[0];
-            var (variant, variantSize) = GetVariantWithSize(clockSequenceHighAndVariant);
-
-            this.Initialize(
-                timestampLow: allBytes.GetRange(0, 4),
-                timestampMid: allBytes.GetRange(4, 2),
+            Initialize(
                 version: version,
-                timestampHigh: timestampHighAndVersion,
+                timestamp: bytes.GetRange(0, 8),
+                clockSequence: bytes.GetRange(8, 2),
+                node: bytes.GetRange(10, 6),
                 variant: variant,
-                variantSize: variantSize,
-                clockSequenceHigh: clockSequenceHighAndVariant,
-                clockSequenceLow: allBytes.GetRange(9, 1)[0],
-                node: allBytes.GetRange(10, 6)
-            );
+                variantSize: variantSize);
         }
 
-        /// <summary>
-        /// Initializes the internal state.
-        /// </summary>
-        /// <param name="timestampLow">Bytes 0 to 3</param>
-        /// <param name="timestampMid">Bytes 4 to 5</param>
-        /// <param name="version">The version used, must fit in 4 bits (ie., being lesser than 16)</param>
-        /// <param name="timestampHigh">Bytes 6 to 7, 4 most significant bits of byte 6 will be removed</param>
-        /// <param name="variant">The variant used</param>
-        /// <param name="variantSize">The size of the variant used, in number of bits</param>
-        /// <param name="clockSequenceHigh">Byte 8, 2 most significant bits will be removed</param>
-        /// <param name="clockSequenceLow">Byte 9</param>
-        /// <param name="node">Bytes 10 to 15</param>
-        /// <exception cref="System.ArgumentException">
-        /// If any of these situations occur:
-        /// <list>
-        /// <item>If <see cref="version"> is greater than 15</item>
-        /// <item>If <see cref="timestampLow"> doesn't contain 4 bytes</item>
-        /// <item>If <see cref="timestampMid"> doesn't contain 2 bytes</item>
-        /// <item>If <see cref="timestampHigh"> doesn't contain 2 bytes</item>
-        /// <item>If <see cref="node"> doesn't contain 6 bytes</item>
-        /// </list>
-        /// </exception>
         private void Initialize(
-            List<byte> timestampLow,
-            List<byte> timestampMid,
             int version,
-            List<byte> timestampHigh,
-            int variant,
-            int variantSize,
-            byte clockSequenceHigh,
-            byte clockSequenceLow,
-            List<byte> node
-        )
+            List<byte> timestamp,
+            List<byte> clockSequence,
+            List<byte> node,
+            int variant = RFC_VARIANT,
+            int variantSize = RFC_VARIANT_SIZE)
         {
             if (version > LOWEST_4_BITS_MASK)
             {
@@ -176,44 +163,21 @@ namespace CleanArch.Domain.ValueObject.Identity.Uuid
             }
             this.version = version;
 
-            if (timestampLow.Count != 4)
-            {
-                throw new ArgumentException($"Timestamp-low bytes count must be 4, got {timestampLow.Count}");
-            }
-            this.timestampLow = timestampLow;
-
-            if (timestampMid.Count != 2)
-            {
-                throw new ArgumentException($"Timestamp-mid bytes count must be 2, got {timestampMid.Count}");
-            }
-            this.timestampMid = timestampMid;
-
-            if (timestampHigh.Count != 2)
-            {
-                throw new ArgumentException($"Timestamp-high bytes count must be 2, got {timestampHigh.Count}");
-            }
-            this.timestampHigh = timestampHigh;
+            this.timestampLow = timestamp.GetRange(0, 4);
+            this.timestampMid = timestamp.GetRange(4, 2);
+            this.timestampHigh = timestamp.GetRange(6, 2);
             this.timestampHigh[0] &= LOWEST_4_BITS_MASK;
 
             this.variant = variant;
             this.variantSize = variantSize;
 
             byte clockSequenceHighBitMask = Convert.ToByte(0b_1111_1111 >> this.variantSize);
-            this.clockSequenceHigh = Convert.ToByte(clockSequenceHigh & clockSequenceHighBitMask);
+            this.clockSequenceHigh = Convert.ToByte(clockSequence[0] & clockSequenceHighBitMask);
+            this.clockSequenceLow = clockSequence[1];
 
-            this.clockSequenceLow = clockSequenceLow;
-
-            if (node.Count != 6)
-            {
-                throw new ArgumentException($"Node bytes count must be 6, got {node.Count}");
-            }
             this.node = node;
         }
 
-        /// <summary>
-        /// Describes the variant.
-        /// </summary>
-        /// <returns>Description of the variant</returns>
         private string GetVariantDescription()
         {
             switch (this.variant)
@@ -286,7 +250,7 @@ namespace CleanArch.Domain.ValueObject.Identity.Uuid
         /// <returns>True if the byte matches 0b_10xx_xxxx</returns>
         private static bool IsRfcVariant(byte clockSequenceHigh)
         {
-            byte rfcPattern = 0b_1000_0000;
+            byte rfcPattern = RFC_VARIANT << (8 - RFC_VARIANT_SIZE);
             return IsVariant(rfcPattern, clockSequenceHigh);
         }
 
@@ -297,7 +261,7 @@ namespace CleanArch.Domain.ValueObject.Identity.Uuid
         /// <returns>True if the byte matches 0b_110x_xxxx</returns>
         private static bool IsMicrosoftVariant(byte clockSequenceHigh)
         {
-            byte microsoftPattern = 0b_1100_0000;
+            byte microsoftPattern = MICROSOFT_VARIANT << (8 - MICROSOFT_VARIANT_SIZE);
             return IsVariant(microsoftPattern, clockSequenceHigh);
         }
 
@@ -308,7 +272,7 @@ namespace CleanArch.Domain.ValueObject.Identity.Uuid
         /// <returns>True if the byte matches 0b_111x_xxxx</returns>
         private static bool IsFutureVariant(byte clockSequenceHigh)
         {
-            byte futurePattern = 0b_1110_0000;
+            byte futurePattern = FUTURE_VARIANT << (8 - FUTURE_VARIANT_SIZE);
             return IsVariant(futurePattern, clockSequenceHigh);
         }
 
